@@ -1,0 +1,53 @@
+[build-system]
+requires = ["setuptools", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "controlled-document-retrieval-compliance-tracking-system"
+version = "0.1.0"
+description = "Controlled document retrieval, compliance tracking, and audit-ready Q&A over synthetic regulatory content."
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+  { name = "Codex" }
+]
+dependencies = [
+  "fastapi==0.115.8",
+  "httpx==0.28.1",
+  "langchain==0.3.19",
+  "numpy==2.2.3",
+  "openai==1.63.2",
+  "openpyxl==3.1.5",
+  "pgvector==0.3.6",
+  "psycopg[binary]==3.2.6",
+  "pydantic==2.10.6",
+  "python-dotenv==1.0.1",
+  "pyyaml==6.0.2",
+  "scikit-learn==1.6.1",
+  "sqlalchemy==2.0.38",
+  "uvicorn[standard]==0.34.0",
+]
+
+[project.optional-dependencies]
+dev = [
+  "pytest==8.3.4",
+  "ruff==0.9.7",
+]
+
+[tool.setuptools]
+package-dir = {"" = "src"}
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+pythonpath = ["src", "."]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = ["E", "F", "I", "B", "UP", "N"]
