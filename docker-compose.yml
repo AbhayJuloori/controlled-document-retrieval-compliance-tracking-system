@@ -1,0 +1,40 @@
+version: "3.9"
+
+services:
+  db:
+    image: pgvector/pgvector:pg16
+    container_name: controlled-docs-db
+    environment:
+      POSTGRES_DB: controlled_docs
+      POSTGRES_USER: controlled_docs
+      POSTGRES_PASSWORD: controlled_docs
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U controlled_docs -d controlled_docs"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+
+  app:
+    build: .
+    container_name: controlled-docs-app
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql+psycopg://controlled_docs:controlled_docs@db:5432/controlled_docs
+      EMBEDDING_BACKEND: local
+      LOG_LEVEL: INFO
+    ports:
+      - "8000:8000"
+    command: >
+      sh -c "python -m data.generate_synthetic_data &&
+             python -m scripts.ingest --register data/document_register.xlsx --docs-dir data/docs &&
+             python -m scripts.serve --host 0.0.0.0 --port 8000"
+
+volumes:
+  postgres_data:
+
