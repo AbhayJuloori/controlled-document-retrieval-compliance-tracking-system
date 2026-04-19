@@ -1,19 +1,25 @@
 # Controlled Document Retrieval & Compliance Tracking System
 
-Python + SQL system for ingesting synthetic controlled compliance documents, enforcing jurisdiction and document-type filters, tracking versions and status, supporting hybrid retrieval, and returning audit-ready answers with citations.
+A compliance-focused retrieval system for controlled documents with lifecycle awareness, jurisdiction filters, and audit-ready citations.
 
-## What It Does
+The project is designed around a practical problem: retrieving the right approved document version for the right user, at the right point in time, without losing traceability. Instead of treating document search as generic semantic search, it enforces document status, role-based access, jurisdiction, document type, and effective-date rules before returning a source-bounded answer.
 
-- Ingests from a document register workbook (`.xlsx`) and a local folder of `.txt` / `.md` files.
-- Normalizes metadata, computes checksums, chunks content, embeds chunks, and stores them in SQL.
-- Supports Postgres + `pgvector` in Docker and a SQLite JSON-vector fallback for local laptop runs.
-- Enforces retrieval controls for `role`, `jurisdiction`, `doc_type`, and `as_of` date.
-- Defaults to `APPROVED` documents only and requires `Auditor` role to include `DRAFT` / `OBSOLETE`.
-- Logs ingestion, status transitions, query execution, and override behavior to an append-only `audit_log`.
-- Provides a CLI and FastAPI surface for source-bounded Q&A with required citations.
-- Ships a synthetic QA benchmark and compliance dashboard export.
+## What the system does
 
-## Repository Layout
+- Ingests a document register workbook plus a local folder of controlled documents
+- Normalizes metadata, versions, checksums, and document status
+- Chunks and embeds content for retrieval
+- Supports Postgres + `pgvector` in Docker and a SQLite JSON-vector fallback for local runs
+- Enforces retrieval controls for `role`, `jurisdiction`, `doc_type`, and `as_of` date
+- Defaults to `APPROVED` content only unless an authorized role requests broader access
+- Logs ingestion, overrides, status transitions, and query activity to an append-only audit log
+- Exposes both a CLI flow and a FastAPI service for citation-first Q&A
+
+## Why this project matters
+
+Many RAG demos show retrieval quality, but not governance. In regulated environments, the hard part is often not finding a relevant paragraph. It is proving that the returned answer came from the correct document version, that draft or obsolete content was excluded, and that the retrieval respected role and jurisdiction constraints. This project is built around that layer of control.
+
+## Repository layout
 
 ```text
 controlled-document-retrieval-compliance-tracking-system/
@@ -32,19 +38,6 @@ controlled-document-retrieval-compliance-tracking-system/
 │   ├── ingest.py
 │   └── serve.py
 ├── src/controlled_docs/
-│   ├── audit.py
-│   ├── benchmark.py
-│   ├── chunking.py
-│   ├── compliance.py
-│   ├── config.py
-│   ├── db.py
-│   ├── embeddings.py
-│   ├── ingestion.py
-│   ├── models.py
-│   ├── qa.py
-│   ├── retrieval.py
-│   ├── schemas.py
-│   └── server.py
 ├── tests/
 ├── .env.example
 ├── Dockerfile
@@ -53,17 +46,17 @@ controlled-document-retrieval-compliance-tracking-system/
 └── pyproject.toml
 ```
 
-## Data Model
+## Core data model
 
-- `documents`: document metadata, lifecycle status, and current version pointer.
-- `document_versions`: effective dates, checksum, supersedence, source path.
-- `chunks`: chunk text, embeddings, and metadata JSON.
-- `access_policies`: simple role-based jurisdiction / doc-type allow lists.
-- `audit_log`: append-only event history for ingestion, queries, and overrides.
+- `documents`: document metadata, lifecycle status, and current-version pointer
+- `document_versions`: effective dates, checksums, supersedence, and source paths
+- `chunks`: chunk text, embeddings, and metadata JSON
+- `access_policies`: role-based jurisdiction and document-type constraints
+- `audit_log`: append-only history for ingestion, retrieval, and override events
 
-`documents.current_version_id` is the single authoritative current-version reference. Status transitions are logged through the ingestion service.
+`documents.current_version_id` is treated as the canonical current-version reference.
 
-## Quick Start
+## Quick start
 
 ### Local SQLite fallback
 
@@ -74,29 +67,29 @@ python3 -m venv .venv
 pip install ".[dev]"
 python -m data.generate_synthetic_data
 python -m scripts.ingest --register data/document_register.xlsx --docs-dir data/docs
-python -m scripts.ask --role Analyst --jurisdiction US-FDA --doc-type SOP --as-of 2026-01-15 --question "Within how many business days must batch records be reviewed after manufacturing completion?"
+python -m scripts.ask --role Analyst --jurisdiction US-FDA --doc-type SOP --as_of 2026-01-15 --question "Within how many business days must batch records be reviewed after manufacturing completion?"
 python -m scripts.evaluate
-python -m scripts.compliance_tracker --as-of 2026-01-15 --output artifacts/compliance_dashboard.csv
+python -m scripts.compliance_tracker --as_of 2026-01-15 --output artifacts/compliance_dashboard.csv
 python -m scripts.serve
 ```
 
-### Docker / Postgres + pgvector
+### Docker with Postgres + `pgvector`
 
 ```bash
 cp .env.example .env
 docker compose up --build
 ```
 
-API will be available at [http://localhost:8000](http://localhost:8000).
+API: [http://localhost:8000](http://localhost:8000)
 
-## Example CLI Query
+## Example query
 
 ```bash
 python -m scripts.ask \
   --role Analyst \
   --jurisdiction US-FDA \
   --doc-type SOP \
-  --as-of 2026-01-15 \
+  --as_of 2026-01-15 \
   --question "Within how many business days must batch records be reviewed after manufacturing completion?"
 ```
 
@@ -108,7 +101,7 @@ Citations:
   - [DOC:cad3fe6d-986b-567b-b9fd-7093cc96ce31 VER:2 CH:87691cbb-33f5-5dc6-8590-36d86b628551]
 ```
 
-## API Example
+## API example
 
 ```bash
 curl -X POST http://localhost:8000/ask \
@@ -122,9 +115,9 @@ curl -X POST http://localhost:8000/ask \
   }'
 ```
 
-## Benchmark and Evaluation
+## Evaluation and outputs
 
-The synthetic benchmark contains 60 questions across `US-FDA`, `EU-MDR`, and `ISO13485`, spanning `SOP`, `WI`, `POLICY`, `TRAINING`, and `CAPA`.
+The synthetic benchmark includes 60 questions across `US-FDA`, `EU-MDR`, and `ISO13485`, spanning `SOP`, `WI`, `POLICY`, `TRAINING`, and `CAPA`.
 
 Run:
 
@@ -137,49 +130,36 @@ Outputs:
 - `artifacts/evaluation_report.csv`
 - `artifacts/evaluation_summary.md`
 
-Illustrative report snippet:
-
-```csv
-qid,question,recall_at_k,citation_accuracy,grounding_rate,expected_document_id,expected_version_number
-USFDA_BATCH_RECORD_REVIEW-v2-q1,"As of 2026-01-15, within how many business days must batch records be reviewed after manufacturing completion?",1,1,1.0,cad3fe6d-986b-567b-b9fd-7093cc96ce31,2
-```
-
-## Compliance Tracker
-
-Run:
+You can also generate a compliance dashboard export with:
 
 ```bash
-python -m scripts.compliance_tracker --as-of 2026-01-15 --output artifacts/compliance_dashboard.csv
+python -m scripts.compliance_tracker --as_of 2026-01-15 --output artifacts/compliance_dashboard.csv
 ```
 
-Dashboard columns:
+Flags include:
 
-- `document_id`
-- `title`
-- `status`
-- `effective_date`
-- `days_since_review`
-- `risk_flag`
+- `REAPPROVAL_OVERDUE`
+- `DRAFT_IN_CONTROLLED_SET`
+- `OBSOLETE_ACTIVE_REFERENCE`
+- `NO_EFFECTIVE_VERSION`
 
-Flags include `REAPPROVAL_OVERDUE`, `DRAFT_IN_CONTROLLED_SET`, `OBSOLETE_ACTIVE_REFERENCE`, and `NO_EFFECTIVE_VERSION`.
+## Environment variables
 
-## Environment Variables
+- `DATABASE_URL`: SQLite by default, or Postgres for `pgvector`
+- `EMBEDDING_BACKEND`: `local` or `openai`
+- `OPENAI_API_KEY`: required only for OpenAI embeddings
+- `OPENAI_EMBEDDING_MODEL`: default `text-embedding-3-small`
+- `CHUNK_SIZE`, `CHUNK_OVERLAP`, `RETRIEVAL_TOP_K`, `REVIEW_WINDOW_DAYS`
 
-- `DATABASE_URL`: SQLite by default; set Postgres URL for `pgvector`.
-- `EMBEDDING_BACKEND`: `local` or `openai`.
-- `OPENAI_API_KEY`: required only when `EMBEDDING_BACKEND=openai`.
-- `OPENAI_EMBEDDING_MODEL`: default `text-embedding-3-small`.
-- `CHUNK_SIZE`, `CHUNK_OVERLAP`, `RETRIEVAL_TOP_K`, `REVIEW_WINDOW_DAYS`.
+## Security notes
 
-## Security Notes
-
-- Do not commit `.env` files or API keys.
-- The repository uses synthetic data only.
-- Audit logs intentionally capture query filters and object IDs; avoid putting secrets into prompts.
-- OpenAI embeddings are optional and disabled by default.
+- The repository uses synthetic data only
+- `.env` files and API keys should not be committed
+- Audit logs intentionally capture filters and object IDs, so prompts should not contain secrets
+- OpenAI embeddings are optional and disabled by default
 
 ## Notes
 
-- The source-bounded Q&A flow is deterministic and citation-first.
-- The local embedding fallback uses a hashing vectorizer so the project works without paid API keys.
-- The synthetic corpus includes jurisdictional conflicts, version drift, draft content, and obsolete references to exercise retrieval controls.
+- The retrieval flow is citation-first and source-bounded
+- The local fallback uses a hashing vectorizer so the system works without paid API keys
+- The synthetic corpus intentionally includes conflicting jurisdictions, version drift, draft content, and obsolete references to exercise the control layer
